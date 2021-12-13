@@ -3,12 +3,12 @@ import random
 import numpy as np
 from collections import deque
 from game import SnakeGameAI, Direction, Point
-from model import Linear_QNet, QTrainer
+from model import Linear_QNetwork, DeepQTrainer
 from helper import plot
 
 MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
-LR = 0.001 # learning rate
+LR = 0.002 # learning rate
 
 class Agent:
 
@@ -17,19 +17,20 @@ class Agent:
         self.epsilion = 0 # randomness
         self.gamma = 0.9 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft if exceed the length
-        self.model = Linear_QNet(11, 256, 3)  # input 11, output 3
-        self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
+        self.model = Linear_QNetwork(11, 256, 3)  # input 11, output 3
+        self.trainer = DeepQTrainer(self.model, lr=LR, gamma=self.gamma)
         # TODO: model, trainer--do optimization
 
 
-    def get_state(self, game): # caculate the current state of the game
+    # caculate the current state of the game
+    def get_state(self, game):
         head = game.snake[0]
         # BLOCK_SIZE 20
         point_l = Point(head.x - 20, head.y)
         point_r = Point(head.x + 20, head.y)
         point_u = Point(head.x, head.y - 20)
         point_d = Point(head.x, head.y + 20)
-        
+
         dir_l = game.direction == Direction.LEFT
         dir_r = game.direction == Direction.RIGHT
         dir_u = game.direction == Direction.UP
@@ -42,30 +43,30 @@ class Agent:
         # e.g. 1,0,0,0,0,1,0,0,1,1,0
         state = [
             # Danger straight
-            (dir_r and game.is_collision(point_r)) or 
-            (dir_l and game.is_collision(point_l)) or 
-            (dir_u and game.is_collision(point_u)) or 
+            (dir_r and game.is_collision(point_r)) or
+            (dir_l and game.is_collision(point_l)) or
+            (dir_u and game.is_collision(point_u)) or
             (dir_d and game.is_collision(point_d)),
 
             # Danger right
-            (dir_u and game.is_collision(point_r)) or 
-            (dir_d and game.is_collision(point_l)) or 
-            (dir_l and game.is_collision(point_u)) or 
+            (dir_u and game.is_collision(point_r)) or
+            (dir_d and game.is_collision(point_l)) or
+            (dir_l and game.is_collision(point_u)) or
             (dir_r and game.is_collision(point_d)),
 
             # Danger left
-            (dir_d and game.is_collision(point_r)) or 
-            (dir_u and game.is_collision(point_l)) or 
-            (dir_r and game.is_collision(point_u)) or 
+            (dir_d and game.is_collision(point_r)) or
+            (dir_u and game.is_collision(point_l)) or
+            (dir_r and game.is_collision(point_u)) or
             (dir_l and game.is_collision(point_d)),
-            
+
             # Move direction
             dir_l,
             dir_r,
             dir_u,
             dir_d,
-            
-            # Food location 
+
+            # Food location
             game.food.x < game.head.x,  # food left
             game.food.x > game.head.x,  # food right
             game.food.y < game.head.y,  # food up
@@ -78,14 +79,14 @@ class Agent:
         # done: game over
         # store one tuple
         self.memory.append((state, action, reward, next_state, done)) # popleft if MAX_MEM is reached
-    
+
     def train_long_memory(self):
         # grab a batch from memory
         if len(self.memory) > BATCH_SIZE:
-            mini_sample = random.sample(self.memory, BATCH_SIZE) # list of tuples 
+            mini_sample = random.sample(self.memory, BATCH_SIZE) # list of tuples
         else:
             mini_sample = self.memory
-        
+
         states, actions, rewards, next_states, dones = zip(*mini_sample)
         self.trainer.train_step(states, actions, rewards, next_states, dones)
 
@@ -93,6 +94,7 @@ class Agent:
         # train for one step
         self.trainer.train_step(state, action, reward, next_state, done)
 
+    # Call model for getting the next state of the snake
     def get_action(self, state):
         # random moves: tradeoff exploration / exploitation
         # logic: the more games we have, the smaller the epsilion is
@@ -107,7 +109,7 @@ class Agent:
             prediction = self.model(state0)  # execute the forward function to predict
             move = torch.argmax(prediction).item()
             final_move[move] = 1
-        
+
         return final_move
 
 
@@ -145,7 +147,7 @@ def train():
             if score > record: # a new high score
                 record = score
                 agent.model.save()
-            
+
             print('Game', agent.n_games, 'Score', score, 'Record:', record)
 
             plot_scores.append(score)
